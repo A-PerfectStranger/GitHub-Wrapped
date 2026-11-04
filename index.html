@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="description" content="Tu año en GitHub, en otra órbita. Descubre tus contribuciones, palabras y repositorios en un resumen interactivo.">
+  <title>GitHub Wrapped — Tu código cuenta una historia</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/d3-cloud@1.2.7/build/d3.layout.cloud.js" crossorigin="anonymous"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <header class="topbar"><a class="brand" href="./" aria-label="GitHub Wrapped, inicio"><span class="brand-icon" aria-hidden="true">↗</span> github<span class="muted">/</span><b>wrapped</b><span class="edition">ANNUAL RECAP</span></a><span class="public"><i></i> Código público. Historias personales.</span><a class="source" href="https://github.com/A-PerfectStranger/GitHub-Wrapped" target="_blank" rel="noreferrer">Ver código <span aria-hidden="true">↗</span></a></header>
+  <main id="main">
+    <section class="slide hero" id="resumen" aria-labelledby="hero-title">
+      <div class="orbit-art" aria-hidden="true"><div class="orbit o1"></div><div class="orbit o2"></div><div class="orbit o3"></div><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="orb orb-c"></div><span id="year-art">2026</span><span class="art-caption">A YEAR OF MAKING THINGS.</span></div>
+      <div class="hero-copy"><p class="eyebrow"><span class="tiny-star">✳</span> TU CÓDIGO CUENTA UNA HISTORIA</p><h1 id="hero-title">Tu año.<br>En otra <em>órbita.</em></h1><p class="intro">Las ideas que lanzaste. Las noches que se alargaron.<br>Todo lo que construiste, en tu GitHub Wrapped.</p>
+        <form id="search-form"><label for="username">TU USUARIO DE GITHUB</label><div class="input-row"><span aria-hidden="true">@</span><input id="username" name="user" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="tu-usuario" pattern="[a-zA-Z0-9-]{1,39}" maxlength="39" required aria-describedby="status"><label class="sr-only" for="year">Año del resumen</label><select id="year" name="year"></select><button id="submit" type="submit">Mi Wrapped <span aria-hidden="true">↗</span></button></div></form>
+        <div class="form-meta"><span>Sin login. Solo tu universo público.</span><button id="demo" type="button">Explorar la demo <span aria-hidden="true">→</span></button></div>
+        <p id="status" role="status" aria-live="polite"></p>
+      </div>
+      <div id="summary" class="summary" hidden><div class="identity"><span id="avatar" class="avatar" aria-hidden="true">↗</span><div><p id="account"></p><span id="data-label" class="muted"></span></div><span id="demo-badge" class="badge" hidden>DATOS DE EJEMPLO</span></div><div id="metrics" class="metrics"></div><div class="persona-row"><div><span class="eyebrow">TU ALTER EGO</span><h2 id="persona"></h2><p id="reason"></p></div><div class="language-feature"><span class="eyebrow">LENGUAJE ESTRELLA</span><strong id="top-language"></strong><span id="language-note" class="muted">Por bytes en tus repos más activos</span></div></div></div>
+      <div class="section-bottom"><span class="mono">01 / 04 <span class="muted">— EL RESUMEN</span></span><a id="scroll-hint" href="#linea" hidden>Tu historia sigue abajo <span aria-hidden="true">↓</span></a><span id="initial-note" class="muted">Pequeños commits. Grandes historias.</span></div>
+    </section>
+    <div id="chapters" hidden>
+      <section class="slide" id="linea" aria-labelledby="timeline-title"><p class="eyebrow">02 / LOS MOMENTOS QUE CUENTAN</p><h2 id="timeline-title" class="section-title">No pasó de la noche<br>a la <em>mañana.</em></h2><p class="section-intro">Una contribución llevó a otra. Estos fueron tus puntos de inflexión.</p><div id="timeline" class="timeline"></div><p class="data-note">El calendario cuenta contribuciones: commits, PRs, issues y reviews. Las rachas se basan en ese calendario.</p></section>
+      <section class="slide" id="palabras" aria-labelledby="words-title"><div class="section-heading"><div><p class="eyebrow">03 / ENTRE LÍNEAS</p><h2 id="words-title" class="section-title">Tu código tiene<br><em>vocabulario.</em></h2></div><p class="section-intro">Si tus commits pudieran hablar,<br>estas serían sus palabras favoritas.</p></div><div id="wordcloud" class="wordcloud" aria-label="Palabras más frecuentes de tus commits"></div><p id="sample-note" class="data-note"></p></section>
+      <section class="slide" id="galaxia" aria-labelledby="galaxy-title"><div class="section-heading"><div><p class="eyebrow">04 / TU PEQUEÑO UNIVERSO</p><h2 id="galaxy-title" class="section-title">Ideas con<br><em>gravedad propia.</em></h2></div><p class="section-intro">Cada repositorio, un planeta.<br>Cada commit lo hace un poco más grande.</p></div><div id="galaxy" class="galaxy"></div><div class="galaxy-key mono"><span>◉ Tamaño = commits</span><span>◌ Órbita = último push</span><span>● Color = lenguaje</span></div><p class="data-note">Hasta 60 repos públicos con commits en el año. Los pushes recientes orbitan más cerca.</p><a class="back-top" href="#resumen">Volver al comienzo ↑</a></section>
+    </div>
+  </main>
+  <nav id="slide-nav" class="slide-nav" aria-label="Diapositivas" hidden><a href="#resumen" aria-label="1. Resumen" aria-current="step">01</a><a href="#linea" aria-label="2. Línea de tiempo">02</a><a href="#palabras" aria-label="3. Palabras de tus commits">03</a><a href="#galaxia" aria-label="4. Galaxia de repositorios">04</a></nav>
+  <footer><a class="brand" href="./">github<span class="muted">/</span><b>wrapped</b></a><p>Hecho de código y curiosidad. Solo datos públicos de GitHub.<br><span class="muted">Proyecto independiente, sin afiliación con GitHub ni Spotify.</span></p><a href="mailto:eduardoarcost6to@gmail.com">eduardoarcost6to@gmail.com ↗</a></footer>
+</body>
+</html>
