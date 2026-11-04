@@ -1,7 +1,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
-import handler, { wordsFrom, longestStreak, personality } from '../api/wrapped.js';
+import handler, { appJwt, wordsFrom, longestStreak, personality } from '../api/wrapped.js';
 const originalFetch = globalThis.fetch;
 const envNames = ['GITHUB_APP_ID', 'GITHUB_APP_PRIVATE_KEY', 'GITHUB_APP_INSTALLATION_ID'];
 const originalEnv = envNames.map(name => process.env[name]);
@@ -97,7 +97,32 @@ test('REST rate limits are surfaced and unavailable samples are marked partial',
 test('empty years and unexpected failures remain valid JSON', async () => {
   const user = profile(); user.contributionsCollection.commitContributionsByRepository = []; user.contributionsCollection.contributionCalendar.weeks = [];
   upstream({ user }); const result = await request('/api/wrapped?user=octocat'); assert.equal(result.status, 200); assert.deepEqual(result.body.timeline, []); assert.deepEqual(result.body.repos, []);
-  globalThis.fetch = async () => { throw new Error('SECRET failure detail'); }; const error = await request('/api/wrapped?user=octocat'); assert.equal(error.status, 500); assert.ok(!error.body.error.includes('SECRET'));
+  upstream({ user: { ...profile(), contributionsCollection: null } }); const error = await request('/api/wrapped?user=octocat'); assert.equal(error.status, 500); assert.ok(!error.body.error.includes('SECRET'));
 });
 
 test('upstream deadlines return 504 without exposing internals', async () => { globalThis.fetch = async () => { throw new DOMException('private upstream trace', 'TimeoutError'); }; const result = await request('/api/wrapped?user=octocat'); assert.equal(result.status, 504); assert.equal(result.headers['Cache-Control'], 'no-store'); assert.ok(!result.body.error.includes('private')); });
+
+test('PEM parsing accepts PKCS1/PKCS8, multiline, quoted and escaped line endings', () => {
+  for (const type of ['pkcs1', 'pkcs8']) {
+    const pem = privateKey.export({ type, format: 'pem' });
+    for (const value of [pem, pem.replace(/\n/g, '\\n'), '"' + pem.replace(/\n/g, '\\r\\n') + '"']) {
+      const [header, payload, signature] = appJwt('123', value).split('.');
+      assert.equal(createVerify('RSA-SHA256').update(`${header}.${payload}`).verify(publicKey, signature, 'base64url'), true);
+    }
+  }
+  for (const key of ['SECRET invalid PEM', generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'pem' })]) {
+    assert.throws(() => appJwt('123', key), error => error.status === 503 && error.code === 'INVALID_PRIVATE_KEY' && !error.message.includes('SECRET'));
+  }
+});
+test('network and TLS failures produce actionable messages without leaking causes', async () => {
+  for (const [cause, code] of [['ENOTFOUND', 'GITHUB_CONNECTION_ERROR'], ['SELF_SIGNED_CERT_IN_CHAIN', 'GITHUB_TLS_ERROR']]) {
+    globalThis.fetch = async () => { throw new TypeError('SECRET fetch failed', { cause: { code: cause, message: 'SECRET proxy' } }); };
+    const result = await request('/api/wrapped?user=octocat');
+    assert.equal(result.status, 502); assert.equal(result.body.code, code); assert.equal(result.headers['Cache-Control'], 'no-store'); assert.ok(!JSON.stringify(result.body).includes('SECRET'));
+  }
+});
+test('OAuth Client ID is rejected with configuration instructions', async () => {
+  process.env.GITHUB_APP_ID = 'Iv1.client-id';
+  const result = await request('/api/wrapped?user=octocat');
+  assert.equal(result.status, 503); assert.equal(result.body.code, 'INVALID_APP_IDS'); configure();
+});
