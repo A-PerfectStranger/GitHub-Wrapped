@@ -68,3 +68,15 @@ Usa las flechas para cambiar de diapositiva, enlaces de navegación o scroll. Lo
 ## Soporte
 
 `SUPPORT_EMAIL`: **eduardoarcost6to@gmail.com**, visible en el pie de `index.html` (configuración pública, sin build). Repositorio: [A-PerfectStranger/GitHub-Wrapped](https://github.com/A-PerfectStranger/GitHub-Wrapped). Proyecto independiente, sin afiliación con GitHub ni Spotify.
+
+## Diagnóstico local
+
+Si la demo funciona pero los datos reales fallan, actualiza el código y reinicia `npm run dev` después de editar `.env`. Abre `/api/wrapped?user=tu-usuario` para ver el JSON de error:
+
+- `INVALID_PRIVATE_KEY` (503): usa el contenido completo del PEM RSA descargado de GitHub, incluidos BEGIN/END; no su ruta ni el webhook secret. Se aceptan saltos reales o `\n` escapados. En `.env`, encierra el contenido en comillas dobles.
+- `INVALID_APP_IDS` (503): App ID e Installation ID son números; Client ID no sirve.
+- `GITHUB_CONNECTION_ERROR` (502): comprueba el acceso de Node a `https://api.github.com` y la configuración de DNS, proxy o firewall.
+- `GITHUB_TLS_ERROR` (502): revisa la cadena de certificados de tu equipo/proxy y configura la CA de confianza de Node si corresponde. Mantén activa la verificación TLS.
+- `GITHUB_TIMEOUT` (504): GitHub superó el tiempo de espera; vuelve a intentar.
+
+Los mensajes no incluyen claves, tokens ni errores internos de la conexión. Un error 500 restante necesita reproducirse con la respuesta y el paso que falla; nunca compartas `.env` ni el PEM.

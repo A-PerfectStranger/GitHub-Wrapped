@@ -1,28 +1,49 @@
-import { createSign } from 'node:crypto';
+import { createSign, createPrivateKey } from 'node:crypto';
 
 const USER = /^[a-zA-Z0-9-]{1,39}$/;
 const STOP = new Set('the and for with from this that into add added update updated fix fixed feat chore refactor docs test tests merge pull request branch commit initial remove removed changes change use using de del la las los el en con por para una uno que un se al es y a o to of in on is it as at be by or an new'.split(' '));
 let installation;
-class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
+class ApiError extends Error { constructor(status, message, code) { super(message); this.status = status; this.code = code; } }
 const fields = 'name nameWithOwner isPrivate stargazerCount forkCount pushedAt createdAt primaryLanguage { name color } languages(first:20, orderBy:{field:SIZE,direction:DESC}) { edges { size node { name color } } }';
 const query = `query Wrapped($login:String!,$from:DateTime!,$to:DateTime!){user(login:$login){login name avatarUrl createdAt contributionsCollection(from:$from,to:$to){totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions totalRepositoryContributions contributionCalendar{weeks{contributionDays{date contributionCount}}} commitContributionsByRepository(maxRepositories:100){repository{${fields}} contributions{totalCount}} repositoryContributions(first:100){nodes{occurredAt repository{isPrivate name}}} pullRequestContributions(first:1,orderBy:{direction:ASC}){nodes{occurredAt pullRequest{repository{isPrivate} title}}}}}}`;
 
 async function github(path, token, options = {}) {
-  const response = await fetch(`https://api.github.com${path}`, { ...options, signal: options.signal || AbortSignal.timeout(6000), headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'GitHub-Wrapped', Authorization: `Bearer ${token}`, ...options.headers } });
+  let response;
+  try {
+    response = await fetch(`https://api.github.com${path}`, { ...options, signal: options.signal || AbortSignal.timeout(6000), headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'GitHub-Wrapped', Authorization: `Bearer ${token}`, ...options.headers } });
+  } catch (error) {
+    if (error.name === 'TimeoutError' || options.signal?.aborted) throw new ApiError(504, 'GitHub tardó demasiado en responder. Vuelve a intentarlo.', 'GITHUB_TIMEOUT');
+    const cause = error.cause?.code;
+    const tls = ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'CERT_HAS_EXPIRED'].includes(cause);
+    throw new ApiError(502, tls ? 'Node no pudo verificar el certificado HTTPS de GitHub. Revisa los certificados de tu equipo o proxy.' : 'El servidor no pudo conectar con api.github.com. Revisa tu conexión, DNS, proxy o firewall.', tls ? 'GITHUB_TLS_ERROR' : 'GITHUB_CONNECTION_ERROR');
+  }
   if (response.status === 429 || (response.status === 403 && (response.headers.get('x-ratelimit-remaining') === '0' || response.headers.has('retry-after')))) throw new ApiError(429, 'GitHub alcanzó su límite de consultas. Inténtalo de nuevo más tarde.');
   if (response.status === 404) throw new ApiError(path.startsWith('/app/') ? 503 : 404, path.startsWith('/app/') ? 'No encontramos la instalación de la GitHub App. Revisa su configuración.' : 'Usuario no encontrado');
   if (!response.ok) throw new ApiError(502, 'No pudimos consultar GitHub. Revisa la instalación y los permisos de la GitHub App.');
   return response.json();
 }
-async function token(signal) {
-  const { GITHUB_APP_ID: id, GITHUB_APP_PRIVATE_KEY: key, GITHUB_APP_INSTALLATION_ID: install } = process.env;
-  if (!id || !key || !install) throw new ApiError(503, 'Falta configurar la GitHub App. Puedes explorar la demo mientras tanto.');
-  if (installation?.expires > Date.now() + 60000) return installation.value;
+export function appJwt(id, key) {
+  let privateKey;
+  try {
+    const pem = key.trim().replace(/^(['"])([\s\S]*)\1$/, '$2').replace(/\\r\\n|\\n/g, '\n');
+    privateKey = createPrivateKey(pem);
+    if (privateKey.asymmetricKeyType !== 'rsa') throw new Error('RSA required');
+  } catch {
+    throw new ApiError(503, 'GITHUB_APP_PRIVATE_KEY no es una clave privada RSA PEM válida. Copia el archivo .pem completo, con BEGIN y END, y reinicia el servidor.', 'INVALID_PRIVATE_KEY');
+  }
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   const now = Math.floor(Date.now() / 1000);
   const body = `${encode({ alg: 'RS256', typ: 'JWT' })}.${encode({ iat: now - 60, exp: now + 540, iss: id })}`;
-  const signature = createSign('RSA-SHA256').update(body).sign(key.replace(/\\n/g, '\n'), 'base64url');
-  const result = await github(`/app/installations/${encodeURIComponent(install)}/access_tokens`, `${body}.${signature}`, { method: 'POST', signal });
+  const signature = createSign('RSA-SHA256').update(body).sign(privateKey, 'base64url');
+  return `${body}.${signature}`;
+}
+async function token(signal) {
+  const { GITHUB_APP_ID: id, GITHUB_APP_PRIVATE_KEY: key, GITHUB_APP_INSTALLATION_ID: install } = process.env;
+  if (!id || !key || !install) throw new ApiError(503, 'Falta configurar la GitHub App. Puedes explorar la demo mientras tanto.');
+  if (!/^\d+$/.test(id) || !/^\d+$/.test(install)) throw new ApiError(503, 'GITHUB_APP_ID y GITHUB_APP_INSTALLATION_ID deben ser IDs numéricos. Usa App ID, no Client ID.', 'INVALID_APP_IDS');
+  if (installation?.expires > Date.now() + 60000) return installation.value;
+  const jwt = appJwt(id, key);
+  const result = await github(`/app/installations/${encodeURIComponent(install)}/access_tokens`, jwt, { method: 'POST', signal });
   installation = { value: result.token, expires: Date.parse(result.expires_at) };
   return result.token;
 }
@@ -142,6 +163,6 @@ export default async function handler(req, res) {
   } catch (error) {
     res.statusCode = error.status || (error.name === 'TimeoutError' ? 504 : 500);
     if (res.statusCode === 429) res.setHeader('Retry-After', '60');
-    res.end(JSON.stringify({ error: error.status ? error.message : 'No pudimos completar el resumen. Inténtalo de nuevo en unos segundos.' }));
+    res.end(JSON.stringify({ error: error.status ? error.message : 'No pudimos completar el resumen. Inténtalo de nuevo en unos segundos.', ...(error.code && { code: error.code }) }));
   }
 }
